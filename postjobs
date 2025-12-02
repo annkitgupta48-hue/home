@@ -1,0 +1,195 @@
+import React from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner'; // Assuming toast is available or I should implement a simple alert
+import { createPageUrl } from '@/utils';
+import { Link } from 'react-router-dom';
+
+export default function PostJob() {
+  const [user, setUser] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
+
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => base44.entities.Category.list(),
+    initialData: []
+  });
+
+  React.useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const u = await base44.auth.me();
+        setUser(u);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkUser();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Add default status and created_by implicitly handled by backend but good to be aware
+    const jobData = {
+        ...data,
+        status: 'pending', // All jobs start as pending
+    };
+
+    try {
+        await base44.entities.Job.create(jobData);
+        setSubmitted(true);
+    } catch (err) {
+        alert("Failed to post job. Please try again.");
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-20">Loading...</div>;
+
+  if (!user) {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sign in to Post a Job</h1>
+            <p className="text-gray-500 max-w-md">You need to be logged in to post a job vacancy. Creating an account is free and takes less than a minute.</p>
+            <Button size="lg" onClick={() => base44.auth.redirectToLogin()} className="bg-blue-600 hover:bg-blue-700">
+                Login / Sign Up
+            </Button>
+        </div>
+    );
+  }
+
+  if (submitted) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 text-center">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Job Submitted Successfully!</h1>
+              <p className="text-gray-500 max-w-md">
+                  Your job post has been submitted for review. It will appear on the website once approved by an admin.
+                  You can check the status in your dashboard.
+              </p>
+              <div className="flex gap-4">
+                  <Link to={createPageUrl('Dashboard')}>
+                    <Button variant="outline">Go to Dashboard</Button>
+                  </Link>
+                  <Link to={createPageUrl('Home')}>
+                    <Button>Back to Home</Button>
+                  </Link>
+              </div>
+          </div>
+      );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
+      <div className="container mx-auto px-4 max-w-2xl">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Post a New Job</h1>
+          <p className="text-gray-500">Reach thousands of potential candidates.</p>
+        </div>
+
+        <Card className="dark:bg-gray-800">
+          <CardContent className="p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="title">Job Title</Label>
+                <Input id="title" name="title" placeholder="e.g. Senior React Developer" required />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label htmlFor="company">Company Name</Label>
+                    <Input id="company" name="company" placeholder="e.g. TechCorp" required />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="location">Location</Label>
+                    <Input id="location" name="location" placeholder="e.g. Remote, New York" required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Select name="category" required>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="job_type">Job Type</Label>
+                    <Select name="job_type" required defaultValue="Full Time">
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Full Time">Full Time</SelectItem>
+                            <SelectItem value="Part Time">Part Time</SelectItem>
+                            <SelectItem value="Internship">Internship</SelectItem>
+                            <SelectItem value="Contract">Contract</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                    <Label htmlFor="sector">Sector</Label>
+                    <Select name="sector" required defaultValue="Private">
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Sector" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Private">Private</SelectItem>
+                            <SelectItem value="Government">Government</SelectItem>
+                            <SelectItem value="Off-Campus">Off-Campus</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="salary_range">Salary Range</Label>
+                    <Input id="salary_range" name="salary_range" placeholder="e.g. $50k - $70k or Stipend" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="apply_link">Application Link (URL)</Label>
+                <Input id="apply_link" name="apply_link" type="url" placeholder="https://..." required />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Job Description</Label>
+                <Textarea id="description" name="description" placeholder="Describe the role, responsibilities, and requirements..." className="h-40" required />
+              </div>
+
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg" size="lg" disabled={isSubmitting}>
+                {isSubmitting ? 'Submitting...' : 'Submit Job Post'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
