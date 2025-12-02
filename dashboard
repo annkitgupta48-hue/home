@@ -1,0 +1,129 @@
+import React from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CheckCircle, XCircle, Clock, Trash2, Eye } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+
+export default function Dashboard() {
+  const [user, setUser] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const u = await base44.auth.me();
+        setUser(u);
+      } catch {
+        base44.auth.redirectToLogin();
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkUser();
+  }, []);
+
+  const { data: myJobs = [] } = useQuery({
+    queryKey: ['myJobs', user?.email],
+    queryFn: async () => {
+      if (!user) return [];
+      // Filter by created_by is automatic in some systems, but here we use the filter explicit if possible, 
+      // or just filter all jobs if backend doesn't support advanced filtering for user.
+      // Base44 usually returns all entities, but let's assume we can filter by created_by if we added it to schema or relying on built-in.
+      // Actually, Base44 built-in fields include created_by.
+      return base44.entities.Job.filter({ created_by: user.email }, { created_date: -1 }, 50);
+    },
+    enabled: !!user
+  });
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this job post?')) {
+      await base44.entities.Job.delete(id);
+      queryClient.invalidateQueries(['myJobs']);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-20">Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
+      <div className="container mx-auto px-4">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Dashboard</h1>
+             <p className="text-gray-500">Manage your job postings and applications.</p>
+          </div>
+          <Link to={createPageUrl('PostJob')}>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white">Post New Job</Button>
+          </Link>
+        </div>
+
+        <Card className="dark:bg-gray-800">
+          <CardHeader>
+            <CardTitle>My Job Postings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {myJobs.length === 0 ? (
+              <div className="text-center py-10 text-gray-500">
+                You haven't posted any jobs yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Job Title</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Date Posted</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {myJobs.map((job) => (
+                      <TableRow key={job.id}>
+                        <TableCell className="font-medium text-gray-900 dark:text-white">{job.title}</TableCell>
+                        <TableCell>{job.company}</TableCell>
+                        <TableCell>{new Date(job.created_date).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            job.status === 'approved' ? 'bg-green-100 text-green-800 hover:bg-green-200' :
+                            job.status === 'rejected' ? 'bg-red-100 text-red-800 hover:bg-red-200' :
+                            'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                          }>
+                            {job.status === 'approved' && <CheckCircle className="w-3 h-3 mr-1" />}
+                            {job.status === 'rejected' && <XCircle className="w-3 h-3 mr-1" />}
+                            {job.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Link to={`${createPageUrl('JobDetails')}?id=${job.id}`}>
+                              <Button variant="ghost" size="icon">
+                                <Eye className="w-4 h-4 text-gray-500" />
+                              </Button>
+                            </Link>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(job.id)}>
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
